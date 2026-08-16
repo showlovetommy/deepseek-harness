@@ -1,0 +1,80 @@
+# electron-builder configuration for the dsh desktop shell (M3 packaging).
+# Targets: NSIS (Windows), DMG (macOS), AppImage + deb (Linux).
+
+appId: ai.deepseek.harness.desktop
+productName: DeepSeek Harness
+# The scoped package name would otherwise mangle into the executable name
+# (`@deepseek-aidsh-desktop`); pin the binary name explicitly.
+executableName: dsh-desktop
+
+directories:
+  output: dist
+  buildResources: resources
+
+# Use the locally installed Electron dist instead of downloading the zip:
+# the environment may not reach the release CDN (see the M3 note), and the
+# dist directory is equivalent for unpacked and installer builds.
+electronDist: node_modules/electron/dist
+
+files:
+  - lib/**/*
+  - config/**/*
+  - resources/**/*
+  # The built web frontend ships as a dependency of this app; electron-builder
+  # collects node_modules, and the frontend package's `files` already limits
+  # the published payload to `dist`.
+  - node_modules/**/*
+
+asar: true
+
+# Native modules must stay unpacked: they are loaded from disk by path, not
+# through the asar archive. landlock-run (Linux sandbox), node-pty (PTY
+# backend), koffi (Win32 dialog), and the Loader's bare-specifier helper all
+# ship as transitive dependencies of the dsh-base bundle.
+asarUnpack:
+  - '**/node_modules/@deepseek-ai/node-addon-landlock-run/**'
+  - '**/node_modules/node-addon-require-builtin/**'
+  - '**/node_modules/node-pty/**'
+  - '**/node_modules/koffi/**'
+
+# electron-rebuild is applied by electron-builder's postinstall automatically
+# for native dependencies; keep the explicit hook for the sandbox addon.
+npmRebuild: true
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.developer-tools
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Development
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+# The tray and window icons (M2 chrome references resources/tray.png).
+icon: resources/icon.png

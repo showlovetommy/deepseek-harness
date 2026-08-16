@@ -209,6 +209,7 @@ flowchart TD
     pkg_host_directory_picker["host-directory-picker"]
     pkg_host_directory_picker_auto["host-directory-picker-auto"]
     pkg_host_directory_picker_browse["host-directory-picker-browse"]
+    pkg_host_directory_picker_electron["host-directory-picker-electron"]
     pkg_host_directory_picker_native["host-directory-picker-native"]
     pkg_host_frontend_static["host-frontend-static"]
     pkg_host_plugin_inventory["host-plugin-inventory"]
@@ -348,6 +349,7 @@ flowchart TD
   pkg_sdk_jsonrpc_demo --> pkg_invariants
   pkg_host_directory_picker --> pkg_invariants
   pkg_host_directory_picker_browse --> pkg_invariants
+  pkg_host_directory_picker_electron --> pkg_invariants
   pkg_host_directory_picker_native --> pkg_invariants
   pkg_host_webserver --> pkg_invariants
   pkg_sandbox_windows_acl --> pkg_invariants
@@ -1445,6 +1447,7 @@ flowchart TD
 | [`sdk-jsonrpc-demo`](../packages/examples/jsonrpc-demo) | `examples` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`host-directory-picker`](../packages/host/directory-picker) | `host` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`host-directory-picker-browse`](../packages/host/directory-picker-browse) | `host` | [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`host-directory-picker-electron`](../packages/host/directory-picker-electron) | `host` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`host-directory-picker-native`](../packages/host/directory-picker-native) | `host` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`host-webserver`](../packages/host/webserver) | `host` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`sandbox-windows-acl`](../packages/sandbox/sandbox-windows-acl) | `sandbox` | [`invariants`](../packages/runtime-diagnostics/invariants) |

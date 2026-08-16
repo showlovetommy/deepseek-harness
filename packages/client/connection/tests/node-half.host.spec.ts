@@ -115,6 +115,21 @@ describe('connection node half', () => {
     expect(upgrades).toHaveLength(0)
   })
 
+  it('provides Connection without a webServer (non-HTTP carrier shape)', async () => {
+    const ctx = new Context()
+    ctx.provide('apiProxy', {} as unknown as ApiProxy)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    // The connection service exists, but generic HTTP RPC channels refuse to
+    // register because no server was composed.
+    const connection = ctx.get('connection') as HostConnectionHandle
+    expect(connection).toBeDefined()
+    expect(() => connection.rpc.handle('/rpc', async () => ({ ok: true, value: null }), {
+      authority: 'loopback',
+    })).toThrow(/no webServer is composed/)
+    await fiber.dispose()
+  })
+
   it('registers one HTTP route plus one upgrade route per downlink and removes all three with the fiber', async () => {
     const { routes, upgrades, dispose } = await mounted()
     expect(routes).toHaveLength(1)

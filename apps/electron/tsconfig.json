@@ -1,0 +1,33 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../vendor/cordis"
+    },
+    {
+      "path": "../../packages/boot/app-boot"
+    },
+    {
+      "path": "../../packages/bundle/base"
+    },
+    {
+      "path": "../../packages/client/modules"
+    },
+    {
+      "path": "../../packages/client/connection/tsconfig.host.json"
+    },
+    {
+      "path": "../../packages/host/apiproxy"
+    },
+    {
+      "path": "../../packages/host/webserver"
+    }
+  ]
+}

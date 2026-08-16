@@ -74,7 +74,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.clientModules` — `ClientModuleRegistry`
 
-The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index tap. Construction runs the activation scan synchronously — a malformed declaration or missing bundle among the already-loaded entries aggregates into one loud throw (FAILED fiber; the boot activation audit reports it).
+The web plugin table service: incremental `dsh.client` scan + wire composition + bundle route + index tap. Construction runs the activation scan synchronously — a malformed declaration or missing bundle among the already-loaded entries aggregates into one loud throw (FAILED fiber; the boot activation audit reports it). The `webServer` service is optional: browser compositions register the bundle route and index tap on it, while a non-HTTP carrier serves the graph and bundles itself.
 
 ```ts cordis-catalog
 /**
@@ -114,5 +114,5 @@ onRebuilt(listener: (id: string, rev: string) => void): () => void
 onGraphChanged(listener: () => void): () => void
 ```
 
-Source: [`packages/client/modules/src/index.ts:184`](../../packages/client/modules/src/index.ts)
+Source: [`packages/client/modules/src/index.ts:215`](../../packages/client/modules/src/index.ts)
 <!-- END GENERATED cordis-surface -->

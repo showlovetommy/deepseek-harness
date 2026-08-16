@@ -56,6 +56,9 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   // The Web build emits sourcemaps for browser debugging; publishing them is
   // what the payload policy forbids, so the bundle ships without them.
   '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
+  // The desktop shell: the main-process bundle plus its composition patch.
+  // The preload ships as .cjs because sandboxed preloads are CommonJS.
+  '@deepseek-ai/dsh-desktop': ['lib/*.js', 'lib/*.cjs', 'config'],
 }
 
 /** The subset of package.json fields this constraint check cares about. */
