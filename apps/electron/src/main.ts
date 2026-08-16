@@ -9,12 +9,13 @@
 
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { inspect } from 'node:util'
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, Tray } from 'electron'
 import type { Context } from '@deepseek-ai/cordis'
-import { boot, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
+import { boot, healProfilesModuleFallback, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import type {} from '@deepseek-ai/dsh-client-modules'
+import { createInternalFallback } from './internal-loader.ts'
 import { createDshProtocolHandler, DSH_APP_HOST } from './protocol.ts'
 import { installApiHandler, installEventPumps } from './ipc-bridge.ts'
 import { buildApplicationMenu, wireTray, type WindowHandle } from './window.ts'
@@ -75,22 +76,32 @@ function resolveDesktopPatch(): string {
 
 /**
  * Boot the desktop host composition: dsh-base bundle patch, then the desktop
- * patch (web rows minus the webserver-dependent ones). The config file is an
- * empty entry list written to the app's user-data directory so Loader has a
- * real include root to anchor `baseUrl`; bare plugin names resolve from the
- * app's own installation (this package's node_modules), not the user-data
- * directory.
+ * patch (web rows minus the webserver-dependent ones). The profile root lives
+ * under the app's user-data directory with the flat module fallback closure
+ * linked beside it (the CLI's installed-app contract), so the Loader resolves
+ * every bare plugin name from the profile tree. The config file is an empty
+ * entry list; the include applies the patches over it. Under Electron the
+ * vendored Loader's native internal-loader helper is unreachable, so the
+ * prepare step installs the equivalent fallback resolver before any config
+ * entry mounts.
  * @returns the settled root context.
  */
 export async function bootHost(): Promise<Context> {
-  const rootConfig = join(app.getPath('userData'), 'cordis.yml')
+  const harnessHome = app.getPath('userData')
+  healProfilesModuleFallback(APP_ANCHOR, harnessHome)
+  const profileDir = join(harnessHome, 'profiles', 'desktop')
   const fs = await import('node:fs')
+  fs.mkdirSync(profileDir, { recursive: true })
+  const rootConfig = join(profileDir, 'cordis.yml')
   fs.writeFileSync(rootConfig, ROOT_CONFIG)
-  const appRoot = pathToFileURL(dirname(APP_ANCHOR)).href + '/'
   return boot(BIN, rootConfig, [
     ...loadOverlayPatches(BIN, resolveBasePatch()),
     ...loadOverlayPatches(BIN, resolveDesktopPatch()),
-  ], undefined, appRoot)
+  ], (ctx) => {
+    if (ctx.loader.internal === undefined) {
+      ctx.loader.internal = createInternalFallback(rootConfig) as unknown as typeof ctx.loader.internal
+    }
+  })
 }
 
 /** Open the main window at the dsh:// page with the IPC carrier preloaded. */
