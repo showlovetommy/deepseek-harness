@@ -1,28 +1,26 @@
 /**
- * Desktop host boot smoke: boots the real desktop composition — the
- * dsh-base bundle patch plus the desktop patch (web rows minus the
- * webserver-dependent ones) over the empty profile root through the vendored
- * Loader — and asserts the tree settles with the clientModules service (the
- * browser roster + boot graph), WITHOUT a webServer (the Electron shell
- * serves dist and bundles over dsh:// itself), and with the IPC carrier's
- * dispatch face (the Connection service's shared fetch handler) callable.
+ * Desktop host boot smoke: boots the real desktop composition through the
+ * shared boot() entry with the exact module-resolution setup the shell uses
+ * at runtime — the profile-tree fallback (`healProfilesModuleFallback` links
+ * plus the Electron internal-loader substitute from `src/main.ts`) — and
+ * asserts the tree settles with the clientModules service (the browser roster
+ * + boot graph), WITHOUT a webServer (the Electron shell serves dist and
+ * bundles over dsh:// itself), and with the IPC carrier's dispatch face (the
+ * Connection service's shared fetch handler) callable.
  */
 
 import { createRequire } from 'node:module'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 // Empty type import carries the clientModules Context merge.
 import type {} from '@deepseek-ai/dsh-client-modules'
-import { healProfilesModuleFallback, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
+import { boot, healProfilesModuleFallback, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
-import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
-import Loader from '@deepseek-ai/cordis-plugin-loader'
-import Include from '@deepseek-ai/cordis-plugin-include'
-import Group from '@deepseek-ai/cordis-plugin-group'
+import { createInternalFallback } from '../src/internal-loader.ts'
 import { installApiHandler, type IpcApiRequest, type IpcMainSurface } from '../src/ipc-bridge.ts'
 
 let root: string | undefined
@@ -35,7 +33,7 @@ afterEach(async () => {
 /** The dsh installation anchor: this app's package.json (the desktop patch rows resolve through its dependencies). */
 const INSTALL_ANCHOR = fileURLToPath(new URL('../package.json', import.meta.url))
 
-/** Boot the desktop composition (base + desktop patches) over an isolated home. */
+/** Boot the desktop composition (base + desktop patches) over an isolated home, mirroring bootHost(). */
 async function bootDesktop(): Promise<Context> {
   root = await mkdtemp(join(tmpdir(), 'dsh-desktop-boot-'))
   const harnessHome = join(root, '.dsh-home')
@@ -52,24 +50,17 @@ async function bootDesktop(): Promise<Context> {
     fileURLToPath(new URL('../config/cordis.patch.yml', import.meta.url)),
   )
 
-  const ctx = new Context()
-  ctx.baseUrl = pathToFileURL(dirname(rootConfig)).href + '/'
-  ctx.provide('dshHomePath', dshHomePath)
-  provideCmdline(ctx, {
-    args: [],
-    exit: (code) => {
-      throw new Error(`dsh-desktop boot smoke: the desktop app requested exit ${String(code)}`)
-    },
+  return boot('dsh-desktop', rootConfig, [...basePatches, ...desktopPatches], (ctx) => {
+    provideCmdline(ctx, {
+      args: [],
+      exit: (code) => {
+        throw new Error(`dsh-desktop boot smoke: the desktop app requested exit ${String(code)}`)
+      },
+    })
+    if (ctx.loader.internal === undefined) {
+      ctx.loader.internal = createInternalFallback(rootConfig) as unknown as typeof ctx.loader.internal
+    }
   })
-  await ctx.plugin(Loader)
-  ctx.loader.builtins.include = Include
-  ctx.loader.builtins.group = Group
-  await ctx.loader.create({
-    name: 'cordis:include',
-    config: { path: pathToFileURL(rootConfig).href, patches: [...basePatches, ...desktopPatches] },
-  })
-  await ctx.loader.await()
-  return ctx
 }
 
 describe('desktop host boot', () => {
@@ -125,5 +116,34 @@ describe('desktop host boot', () => {
       remove()
       await ctx.fiber.dispose()
     }
+  })
+})
+
+describe('createInternalFallback', () => {
+  it('resolves bare package names through the profile closure links', async () => {
+    root = await mkdtemp(join(tmpdir(), 'dsh-fallback-'))
+    const harnessHome = join(root, '.dsh-home')
+    healProfilesModuleFallback(INSTALL_ANCHOR, harnessHome)
+    const profileDir = join(harnessHome, 'profiles', 'desktop')
+    await mkdir(profileDir, { recursive: true })
+    const fallback = createInternalFallback(join(profileDir, 'cordis.yml'))
+    const mod = await fallback.import('@deepseek-ai/dsh-llm', pathToFileURL(profileDir).href + '/')
+    expect(mod).toBeDefined()
+  })
+
+  it('resolves relative, absolute, and file: specifiers against the base URL', async () => {
+    root = await mkdtemp(join(tmpdir(), 'dsh-fallback-'))
+    const profileDir = join(root, 'profile')
+    await mkdir(profileDir, { recursive: true })
+    const noop = join(profileDir, 'noop.js')
+    await writeFile(noop, 'export const marker = 42\n')
+    const fallback = createInternalFallback(join(profileDir, 'cordis.yml'))
+    const base = pathToFileURL(profileDir).href + '/'
+    const viaRelative = await fallback.import('./noop.js', base) as { marker: number }
+    const viaAbsolute = await fallback.import(noop, base) as { marker: number }
+    const viaFileUrl = await fallback.import(pathToFileURL(noop).href, base) as { marker: number }
+    expect(viaRelative).toMatchObject({ marker: 42 })
+    expect(viaAbsolute).toMatchObject({ marker: 42 })
+    expect(viaFileUrl).toMatchObject({ marker: 42 })
   })
 })
