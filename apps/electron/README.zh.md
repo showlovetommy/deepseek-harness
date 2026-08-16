@@ -9,20 +9,43 @@ Electron 桌面壳：主进程在进程内组合 harness 宿主（`dsh-base` bun
 ## 开发
 
 ```sh
-pnpm run build              # build lib + web dist (required once)
-pnpm --filter @deepseek-ai/dsh-desktop dev
+# at the repository root (required once after a fresh clone):
+pnpm run build
+# in the apps/electron directory:
+pnpm run dev
 ```
 
 ## 打包（M3）
 
 ```sh
-pnpm run dist                # electron-builder: NSIS (win) / DMG (mac) / AppImage+deb (linux)
+# in the apps/electron directory:
 pnpm run dist:dir            # unpacked app directory (fast packaging check)
+pnpm run dist                # installers: NSIS (win) / DMG (mac) / AppImage+deb (linux)
 ```
 
 `electron-builder.yml` 持有目标：Windows 用 NSIS，macOS 用 DMG（arm64 + x64），Linux 用 AppImage + deb。构建好的 web 前端经 `@deepseek-ai/dsh-web-frontend` 依赖随包；原生模块（Loader 的 bare-specifier 助手、landlock-run、node-pty）从 asar 解包。图标资源（`resources/icon.png`、`tray.png`）由 `scripts/generate-icons.mjs` 生成（占位图，待设计师提供真实品牌资源）。
 
 窗口打开 `dsh://app/index.html`。配置了 `DEEPSEEK_API_KEY` 时真实宿主 API 经 IPC 流动；追加 `?fixture` 仍可通过 fixture 载体无 key 渲染完整 UI。`dsh://` handler 位于 [`src/protocol.ts`](src/protocol.ts)，是纯 fetch 函数；IPC 桥位于 [`src/ipc-bridge.ts`](src/ipc-bridge.ts)，注入 electron 表面以便单测。宿主启动冒烟测试（[`tests/boot.host.spec.ts`](tests/boot.host.spec.ts)）boot 真实的 base + 桌面组合，断言 `clientModules` 存在、`webServer` 不存在，且真实 `session.list` envelope 经 IPC handler 分发成功。
+
+## 在 Windows 或 macOS 上首次构建
+
+全新机器从头开始：安装 [Node.js](https://nodejs.org) 22.19+ 或 24.x，启用 pnpm 11.7.0（`corepack enable`，或 `npm install -g pnpm@11.7.0`），安装 git，然后：
+
+```sh
+git clone git@github.com:showlovetommy/deepseek-harness.git
+cd deepseek-harness
+pnpm install      # downloads the Electron binary (~100 MB) on first run
+pnpm run build    # at the repository root: compiles every package + the web frontend + this app
+```
+
+`pnpm install` 会下载 Electron；`pnpm run dist` 时 electron-builder 还会拉取平台工具链（Windows 上是 NSIS）。GitHub 慢或不可达时，在每个 shell 里设置镜像：`ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 与 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`（PowerShell 写作 `$env:ELECTRON_MIRROR="..."`）。
+
+开发运行用 `pnpm run dev`（在 `apps/electron` 目录下），或打包：
+
+- Windows —— `pnpm run dist:dir` → `dist/win-unpacked/dsh-desktop.exe`（双击即运行）；`pnpm run dist` → `dist/DeepSeek Harness-Setup-0.1.0-rc.5.exe`（NSIS 安装器）。
+- macOS —— `pnpm run dist:dir` → `dist/mac-arm64/dsh-desktop.app`（Apple Silicon）或 `dist/mac/dsh-desktop.app`（Intel）；`pnpm run dist` → `dist/DeepSeek Harness-0.1.0-rc.5-<arch>.dmg`。配置声明了双架构，只构建本机架构请传一个：`pnpm run dist -- --arm64`（或 `--x64`）。
+
+新构建的应用未签名：Windows SmartScreen 可能要求确认（更多信息 → 仍要运行）；macOS Gatekeeper 可能拒绝首次双击——右键应用选"打开"，或用 `xattr -dr com.apple.quarantine "DeepSeek Harness.app"` 清除隔离标记。
 
 ## 模型体验
 
