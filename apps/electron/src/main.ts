@@ -116,6 +116,17 @@ function openWindow(): BrowserWindow {
       preload: join(dirname(APP_ANCHOR), 'lib', 'preload.cjs'),
     },
   })
+  // A sandboxed preload that fails to load surfaces silently in the renderer;
+  // log the failure and renderer warnings/errors on the main process so a
+  // broken bridge is visible without opening DevTools.
+  win.webContents.on('preload-error', (_event, preloadPath, error) => {
+    console.error(`${BIN}: preload failed to load at ${preloadPath}:`, error)
+  })
+  win.webContents.on('console-message', (details) => {
+    if (details.level === 'warning' || details.level === 'error') {
+      console.log(`${BIN}: renderer ${details.level}: ${details.message}`)
+    }
+  })
   void win.loadURL(`${DSH_SCHEME}://${DSH_APP_HOST}/index.html`)
   return win
 }
