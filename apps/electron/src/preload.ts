@@ -40,3 +40,7 @@ export function exposeBridge(): void {
     },
   })
 }
+
+// The preload script's sole job is exposing the bridge; without this call the
+// renderer falls back to the HTTP carrier and every API request 404s.
+exposeBridge()
