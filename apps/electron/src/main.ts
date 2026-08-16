@@ -10,6 +10,7 @@
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { inspect } from 'node:util'
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, Tray } from 'electron'
 import type { Context } from '@deepseek-ai/cordis'
 import { boot, loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
@@ -172,7 +173,7 @@ void (async () => {
       void ctx.fiber.dispose().finally(() => { app.quit() })
     })
   } catch (error) {
-    console.error(`${BIN}: startup failed:`, error)
+    console.error(`${BIN}: startup failed:`, inspect(error, { depth: Infinity }))
     app.exit(1)
   }
 })()
