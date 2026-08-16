@@ -169,6 +169,29 @@ function installProtocol(ctx: Context): void {
   }))
 }
 
+/**
+ * Verify the settled dispatch face serves the Remote methods the Cordis
+ * inventory panel calls (unpackaged diagnostics): the result isolates a
+ * broken bridge from a stale build of the host packages.
+ * @param ctx - settled host context.
+ */
+async function selfCheckDispatch(ctx: Context): Promise<void> {
+  if (app.isPackaged) return
+  const connection = ctx.get('connection') as { fetchHandler?: { fetch(request: Request): Promise<Response> } } | undefined
+  if (connection?.fetchHandler === undefined) return
+  for (const [method, payload] of [
+    ['dynamicCordisRunner/syncInspectManifest', { args: { providers: [] } }],
+    ['dynamicCordisRunner/inventory', { args: {} }],
+  ] as const) {
+    const response = await connection.fetchHandler.fetch(new Request(`http://dsh.internal/api/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'client-request', rpcId: 'boot-self-check', method, payload }),
+    }))
+    console.log(`${BIN}: self-check ${method} -> ${response.status}`)
+  }
+}
+
 /** Install the IPC carrier (unary handler + event pumps) for one window. */
 function installIpcBridge(ctx: Context, win: BrowserWindow): () => Promise<void> {
   const removeApiHandler = installApiHandler(ctx, ipcMain)
@@ -184,6 +207,7 @@ void (async () => {
   await app.whenReady()
   try {
     const ctx = await bootHost()
+    await selfCheckDispatch(ctx)
     installProtocol(ctx)
     const win = openWindow()
     installIpcBridge(ctx, win)
