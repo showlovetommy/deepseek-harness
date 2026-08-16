@@ -8,6 +8,7 @@ import type { HostDescription, IApiClient } from './api.ts'
 import { ConnectionController, type ConnectionConfig, type ConnectionSinks, type ConnectionState } from './connection.ts'
 import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
+import { ElectronIpcApiClient, type DshIpcBridge } from './electron-ipc-api-client.ts'
 import { createWebConnectionRpc } from './rpc.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
@@ -40,6 +41,8 @@ export {
 // controller remains package-internal.
 export type { ConnectionConfig, ConnectionSinks, ConnectionState }
 export type { ClientConnectionRpc } from '../rpc.ts'
+export { ElectronIpcApiClient } from './electron-ipc-api-client.ts'
+export type { DshIpcBridge, IpcEventStream, IpcFetchResult } from './electron-ipc-api-client.ts'
 
 /** Observable Host description published by each completed connection handshake. */
 export interface HostDescriptionSource {
@@ -85,7 +88,11 @@ export function apply(ctx: Context): void {
   const pageLocation = typeof location === 'undefined' ? undefined : location
   const fixture = pageLocation !== undefined && new URLSearchParams(pageLocation.search).has('fixture')
   const fixtureClient = fixture ? new FixtureApiClient() : undefined
-  const api: IApiClient = fixtureClient ?? new WebApiClient()
+  // The Electron shell's preload exposes a narrow IPC bridge; when present,
+  // the desktop carrier rides it instead of HTTP/WebSocket. The fixture path
+  // stays first so keyless desktop UI development keeps working.
+  const ipcBridge = (globalThis as { __dshBridge?: DshIpcBridge }).__dshBridge
+  const api: IApiClient = fixtureClient ?? (ipcBridge !== undefined ? new ElectronIpcApiClient(ipcBridge) : new WebApiClient())
   const rpc = fixtureClient?.rpc ?? createWebConnectionRpc()
   let started = false
   let description: HostDescription | undefined

@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { WebServer, WebRoute } from '@deepseek-ai/dsh-host-webserver'
-import { ClientModuleRegistry } from '../src/index.ts'
+import { ClientModuleRegistry, resolvePluginBundlePath } from '../src/index.ts'
 
 let root: string | undefined
 
@@ -68,6 +68,20 @@ function construct(packageNames: string[]): ClientModuleRegistry {
   return constructWithRoute(packageNames).service
 }
 
+/** Construct the node-half service without any webServer (the non-HTTP carrier shape). */
+function constructWithoutServer(packageNames: string[]): ClientModuleRegistry {
+  const ctx = new Context()
+  ctx.baseUrl = pathToFileURL(root!).href + '/'
+  ctx.provide('loader', {
+    *entries() {
+      for (const packageName of packageNames) {
+        yield { options: { name: packageName }, fiber: {}, disabled: false }
+      }
+    },
+  })
+  return new ClientModuleRegistry(ctx)
+}
+
 describe('client bundle activation', () => {
   it('allows sibling dsh roles', () => {
     const currentName = '@fixture/current-client-field'
@@ -114,6 +128,16 @@ describe('client bundle activation', () => {
     expect(String(thrown)).not.toContain('pnpm run build')
   })
 
+  it('composes the graph without a webServer for non-HTTP carriers', () => {
+    const packageName = '@fixture/desktop-client'
+    const clientPath = writePackage(packageName)
+    mkdirSync(dirname(clientPath), { recursive: true })
+    writeFileSync(clientPath, 'module.exports = {}\n')
+    const service = constructWithoutServer([packageName])
+    expect(service.graph().entries.map(entry => entry.id)).toEqual([packageName])
+    expect(service.clientPath(packageName)).toBe(clientPath)
+  })
+
   it('serves the source map beside a registered client bundle', async () => {
     const packageName = '@fixture/source-map'
     const clientPath = writePackage(packageName)
@@ -148,5 +172,28 @@ describe('client bundle activation', () => {
       'cache-control': 'no-cache',
     })
     expect(body).toBe(map)
+  })
+})
+
+describe('resolvePluginBundlePath', () => {
+  const table = new Map<string, string>([
+    ['@fixture/scoped', '/abs/lib/client.js'],
+    ['plain', '/abs/plain/client.js'],
+  ])
+  const clientPath = (id: string): string | undefined => table.get(id)
+
+  it('resolves scoped and plain bundle ids to their built paths', () => {
+    expect(resolvePluginBundlePath('/plugins/@fixture/scoped/client.js', clientPath))
+      .toBe('/abs/lib/client.js')
+    expect(resolvePluginBundlePath('/plugins/plain/client.js', clientPath))
+      .toBe('/abs/plain/client.js')
+    expect(resolvePluginBundlePath('/plugins/@fixture/scoped/client.js.map', clientPath))
+      .toBe('/abs/lib/client.js.map')
+  })
+
+  it('returns undefined for unknown ids and unrelated paths', () => {
+    expect(resolvePluginBundlePath('/plugins/unknown/client.js', clientPath)).toBeUndefined()
+    expect(resolvePluginBundlePath('/plugins/events', clientPath)).toBeUndefined()
+    expect(resolvePluginBundlePath('/dist/index.html', clientPath)).toBeUndefined()
   })
 })

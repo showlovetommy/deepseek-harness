@@ -782,6 +782,23 @@
       "ignoreDependencies": [
         "@deepseek-ai/.+"
       ]
+    },
+    "apps/electron": {
+      "entry": [
+        "tests/**/*.spec.ts",
+        "src/main.ts",
+        "src/protocol.ts",
+        "src/preload.ts",
+        "src/ipc-bridge.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/.+",
+        "node-addon-require-builtin"
+      ]
     }
   }
 }

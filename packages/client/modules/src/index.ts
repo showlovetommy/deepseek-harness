@@ -7,6 +7,12 @@
  * `clientModuleHost` service (the HMR node half's registration/notification
  * face).
  *
+ * The `webServer` service is optional: the browser carrier registers its
+ * bundle route and index tap on it, while a non-HTTP carrier (the Electron
+ * shell) consumes the composed graph and resolved bundle paths directly and
+ * serves them itself. Scanning, composition, and bundle-path resolution never
+ * depend on the server.
+ *
  * Scanning is incremental per package — there is no full-rescan code path.
  * Every cordis `internal/plugin` emission (fiber construction/disposal) marks
  * the fiber's entry name dirty; a microtask flush reconciles each dirty name
@@ -99,6 +105,29 @@ class ClientPackageCompositionError extends AggregateError {
   }
 }
 
+/**
+ * Resolve a `/plugins/...` pathname to the on-disk client bundle it names.
+ * The id may contain a scope slash. Anything else under `/plugins` (including
+ * `/plugins/events` when the HMR row is absent) is an unknown resource.
+ * @param pathname - the decoded request pathname.
+ * @param clientPath - resolver from a graph id to its built bundle path.
+ * @returns the absolute bundle (or source-map) path, or `undefined` when the pathname names no registered bundle.
+ */
+export function resolvePluginBundlePath(
+  pathname: string,
+  clientPath: (id: string) => string | undefined,
+): string | undefined {
+  const prefix = '/plugins/'
+  const mapSuffix = '/client.js.map'
+  const bundleSuffix = '/client.js'
+  const isSourceMap = pathname.startsWith(prefix) && pathname.endsWith(mapSuffix)
+  const suffix = isSourceMap ? mapSuffix : bundleSuffix
+  const bundle = pathname.startsWith(prefix) && pathname.endsWith(suffix)
+    ? clientPath(pathname.slice(prefix.length, -suffix.length))
+    : undefined
+  return bundle === undefined ? undefined : `${bundle}${isSourceMap ? '.map' : ''}`
+}
+
 /** One composed table row: the wire entry plus its bundle path. */
 interface WebPluginRecord {
   entry: WebBootEntry
@@ -179,10 +208,12 @@ export function injectBootManifest(html: string, graph: WebBootGraph): string {
  * + bundle route + index tap. Construction runs the activation scan
  * synchronously — a malformed declaration or missing bundle among the
  * already-loaded entries aggregates into one loud throw (FAILED fiber; the
- * boot activation audit reports it).
+ * boot activation audit reports it). The `webServer` service is optional:
+ * browser compositions register the bundle route and index tap on it, while a
+ * non-HTTP carrier serves the graph and bundles itself.
  */
 export class ClientModuleRegistry extends Service {
-  static inject = ['webServer', 'loader']
+  static inject = ['loader']
 
   private readonly table = new Map<string, WebPluginRecord>()
   // Negative verdicts (unresolvable specifier — builtins like cordis:include,
@@ -198,7 +229,7 @@ export class ClientModuleRegistry extends Service {
 
   /**
    * Build the service: subscribe, seed, and run the activation flush.
-   * @param ctx - plugin context carrying webServer and loader.
+   * @param ctx - plugin context carrying the loader service; `webServer` is optional.
    */
   constructor(ctx: Context) {
     super(ctx, 'clientModules')
@@ -238,14 +269,20 @@ export class ClientModuleRegistry extends Service {
       throw new ClientPackageCompositionError(failures)
     }
 
-    ctx.effect(
-      () => ctx.webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
-      'client-modules: bundle route',
-    )
-    ctx.effect(
-      () => ctx.webServer.tapIndex(html => injectBootManifest(html, this.composed)),
-      'client-modules: boot manifest injection',
-    )
+    // The browser carrier owns the HTTP delivery: register the bundle route
+    // and the index tap only when a webserver is composed. A non-HTTP carrier
+    // (the Electron shell) reads graph()/clientPath() and serves them itself.
+    const webServer = ctx.get('webServer')
+    if (webServer !== undefined) {
+      ctx.effect(
+        () => webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
+        'client-modules: bundle route',
+      )
+      ctx.effect(
+        () => webServer.tapIndex(html => injectBootManifest(html, this.composed)),
+        'client-modules: boot manifest injection',
+      )
+    }
   }
 
   /**
@@ -426,17 +463,7 @@ export class ClientModuleRegistry extends Service {
     }
     /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server requests. */
     const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)
-    // The id may contain a scope slash. Anything else under /plugins (including
-    // /plugins/events when the HMR row is absent) is an unknown resource.
-    const prefix = '/plugins/'
-    const mapSuffix = '/client.js.map'
-    const bundleSuffix = '/client.js'
-    const isSourceMap = pathname.startsWith(prefix) && pathname.endsWith(mapSuffix)
-    const suffix = isSourceMap ? mapSuffix : bundleSuffix
-    const clientPath = pathname.startsWith(prefix) && pathname.endsWith(suffix)
-      ? this.clientPath(pathname.slice(prefix.length, -suffix.length))
-      : undefined
-    const path = clientPath === undefined ? undefined : `${clientPath}${isSourceMap ? '.map' : ''}`
+    const path = resolvePluginBundlePath(pathname, id => this.clientPath(id))
     if (path === undefined) {
       res.writeHead(404)
       res.end()
@@ -445,7 +472,7 @@ export class ClientModuleRegistry extends Service {
     try {
       const body = await readFile(path)
       res.writeHead(200, {
-        'content-type': isSourceMap ? 'application/json; charset=utf-8' : 'text/javascript; charset=utf-8',
+        'content-type': path.endsWith('.map') ? 'application/json; charset=utf-8' : 'text/javascript; charset=utf-8',
         'cache-control': 'no-cache',
       })
       res.end(body)
