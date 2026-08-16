@@ -85,6 +85,18 @@ describe('buildApplicationMenu', () => {
     quit.click!()
     expect(app.state.quitCalls).toBe(1)
   })
+
+  it('includes View menu items for reload and DevTools', () => {
+    const menu = fakeMenu()
+    const app = fakeApp()
+    const win = fakeWindow()
+    buildApplicationMenu({ menu: menu.surface, app: app.surface }, win.handle)
+    const view = menu.template.find(item =>
+      typeof item === 'object' && item !== null && (item as { label?: string }).label === 'View') as {
+      submenu: Array<{ role?: string }>
+    }
+    expect(view.submenu.map(item => item.role)).toEqual(['reload', 'toggleDevTools'])
+  })
 })
 
 describe('wireTray', () => {

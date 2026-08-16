@@ -57,6 +57,13 @@ export function buildApplicationMenu(
     { role: 'fileMenu' as const },
     { role: 'editMenu' as const },
     {
+      label: 'View',
+      submenu: [
+        { role: 'reload' as const },
+        { role: 'toggleDevTools' as const },
+      ],
+    },
+    {
       label: 'Window',
       submenu: [
         { role: 'minimize' as const },
