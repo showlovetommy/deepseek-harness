@@ -58,6 +58,9 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   artifactName: ${productName}-Setup-${version}.${ext}
+  # Per-file install progress (ShowInstDetails + SetDetailsPrint) so the
+  # installer visibly copies/removes files instead of painting one bar.
+  include: build/installer.nsh
 
 mac:
   target:

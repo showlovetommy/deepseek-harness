@@ -18,6 +18,10 @@
     "config"
   ],
   "license": "MIT",
+  "author": {
+    "name": "showlovetommy",
+    "email": "330355149@qq.com"
+  },
   "scripts": {
     "dev": "electron .",
     "generate-icons": "node scripts/generate-icons.mjs",
