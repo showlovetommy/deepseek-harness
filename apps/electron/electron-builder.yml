@@ -25,17 +25,18 @@ files:
   # the published payload to `dist`.
   - node_modules/**/*
 
-# No asar archive: the desktop boot's profile fallback
-# (`healProfilesModuleFallback`) junctions `$DSH_HOME/profiles/node_modules` at
-# the app's real node_modules, and a junction cannot target a path inside an
-# asar archive (the archive is one file, not a directory) — packaged runs would
-# fail every bare plugin import with `Cannot find module`. With asar off, the
-# app ships as `resources/app/` with a real node_modules tree the junctions can
-# point at; the trade-off is unpacked files (no archive compression).
-asar: false
+# The desktop boot's profile fallback (`healProfilesModuleFallback`) junctions
+# `$DSH_HOME/profiles/node_modules` at the app's shipped packages, and a
+# junction must name an on-disk directory — so every node_modules package is
+# unpacked from the asar archive (app-boot's resolver rewrites `app.asar` to
+# `app.asar.unpacked` for that). Keeping asar on still archives the shell code
+# (lib, config); the packages themselves ship unpacked.
+asar: true
 
-# (asar: false makes the old asarUnpack list moot: native modules already sit
-# on disk under resources/app/node_modules, no archive to unpack from.)
+asarUnpack:
+  # All of node_modules: the boot closure may junction any package, and
+  # unpacked plugins must resolve their transitive dependencies from disk.
+  - '**/node_modules/**'
 
 # The desktop composition loads no native module at runtime: node-pty's .node
 # is lazy (only interactive terminals touch it, and this composition omits the

@@ -26,7 +26,7 @@ import { createRequire } from 'node:module'
 import {
   existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync,
 } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, sep } from 'node:path'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { applyEntryPatches, type PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
@@ -324,7 +324,15 @@ function packageDirFromAnchor(anchor: string, packageName: string): string | und
   /* v8 ignore next */
   for (const searchPath of createRequire(anchor).resolve.paths(packageName) ?? []) {
     const candidate = join(searchPath, packageName)
-    if (existsSync(join(candidate, 'package.json'))) return candidate
+    if (existsSync(join(candidate, 'package.json'))) {
+      // Electron asar: the anchor sits inside the archive, so Node resolves
+      // the package to the archive's virtual path. A junction must name an
+      // on-disk directory, so point at the unpacked copy the packager
+      // extracted (Electron's fs already redirected the existence check).
+      return candidate.includes(`${sep}app.asar${sep}`)
+        ? candidate.replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`)
+        : candidate
+    }
   }
   return undefined
 }
