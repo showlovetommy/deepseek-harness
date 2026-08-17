@@ -140,6 +140,23 @@ describe('connection node half', () => {
     expect(upgrades).toHaveLength(0)
   })
 
+  it('registers the /api route and downlinks when the webServer arrives after apply', async () => {
+    const ctx = new Context()
+    const routes: WebRoute[] = []
+    const upgrades: WebUpgradeRoute[] = []
+    ctx.provide('apiProxy', {} as unknown as ApiProxy)
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    // The browser carrier's webserver composes after this plugin (the plugin
+    // has `inject: []` and activates first); the route registration waits for
+    // the service through injection rather than reading it eagerly.
+    ctx.provide('webServer', fakeHttpServer(routes, upgrades) as WebServer)
+    await fiber.await()
+    expect(routes).toHaveLength(1)
+    expect(routes[0]).toMatchObject({ kind: 'prefix', path: API_PATH })
+    expect(upgrades.map(route => route.path)).toEqual([MUX_EVENTS_PATH, HOST_EVENTS_PATH])
+    await fiber.dispose()
+  })
+
   it('requires WebSocket upgrade for network GETs to either event path', async () => {
     const { routes, dispose } = await mounted()
     for (const path of [MUX_EVENTS_PATH, HOST_EVENTS_PATH]) {

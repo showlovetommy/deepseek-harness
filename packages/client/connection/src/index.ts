@@ -87,34 +87,50 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
   // Config boundary: a malformed entry fails the load loudly here rather than
   // silently authorizing its hostname prefix at request time.
   for (const entry of trustedHosts) assertTrustedAuthority(entry)
+  // When the proxy is already composed, the carrier-cap mismatch must fail
+  // this apply synchronously (fail-loud at load); the injection below covers
+  // the proxy arriving later.
   if (ctx.get('apiProxy') !== undefined) assertImageBodyCapacity(ctx, maxRequestBodyBytes)
   const connection = new HostConnectionService(ctx, trustedHosts)
   const fetchHandler = connection.fetchHandler
-  const webServer = ctx.get('webServer')
-  if (webServer === undefined) return
-  const route: WebRoute = {
-    kind: 'prefix',
-    path: API_PATH,
-    handler: async (req, res) => {
-      if (!isTrustedApiRequest(req, trustedHosts)) {
-        res.writeHead(403)
-        res.end('forbidden')
-        return
-      }
-      await bridge(req, res, fetchHandler, maxRequestBodyBytes)
-    },
-  }
-  ctx.effect(() => webServer.register(route), 'client-connection: /api route')
+
+  // The webServer service is optional (the Electron shell serves /api over
+  // IPC). `inject: []` activates this plugin before the webserver row, so the
+  // route must wait for the service through injection — an eager `ctx.get`
+  // would see it absent and silently skip the browser carrier's /api route.
+  ctx.inject(['webServer'], (webCtx) => {
+    const route: WebRoute = {
+      kind: 'prefix',
+      path: API_PATH,
+      handler: async (req, res) => {
+        if (!isTrustedApiRequest(req, trustedHosts)) {
+          res.writeHead(403)
+          res.end('forbidden')
+          return
+        }
+        await bridge(req, res, fetchHandler, maxRequestBodyBytes)
+      },
+    }
+    webCtx.effect(() => webCtx.webServer.register(route), 'client-connection: /api route')
+  })
+
+  // The API Proxy's image-capacity guard runs whenever the proxy composes,
+  // with or without a webserver (the Electron carrier still reaches /api
+  // through the proxy's fetch handler).
   ctx.inject(['apiProxy'], (apiCtx) => {
     assertImageBodyCapacity(apiCtx, maxRequestBodyBytes)
-    const downlinkServer = apiCtx.get('webServer')
-    if (downlinkServer === undefined) return
+  })
+
+  // WebSocket downlinks need both the API Proxy and the webserver; injection
+  // waits for both, so a browser carrier gets its downlinks and the Electron
+  // carrier (no webServer) gets none.
+  ctx.inject(['apiProxy', 'webServer'], (apiCtx) => {
     const downlinks = new WebSocketDownlinks(apiCtx.apiProxy)
     const registerDownlink = (
       path: string,
       handle: WebUpgradeRoute['handler'],
     ): void => {
-      apiCtx.effect(() => downlinkServer.registerUpgrade({
+      apiCtx.effect(() => apiCtx.webServer.registerUpgrade({
         path,
         handler: (req, socket, head) => {
           if (!isTrustedApiRequest(req, trustedHosts)) {
