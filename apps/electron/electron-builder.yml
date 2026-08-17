@@ -25,17 +25,17 @@ files:
   # the published payload to `dist`.
   - node_modules/**/*
 
-asar: true
+# No asar archive: the desktop boot's profile fallback
+# (`healProfilesModuleFallback`) junctions `$DSH_HOME/profiles/node_modules` at
+# the app's real node_modules, and a junction cannot target a path inside an
+# asar archive (the archive is one file, not a directory) — packaged runs would
+# fail every bare plugin import with `Cannot find module`. With asar off, the
+# app ships as `resources/app/` with a real node_modules tree the junctions can
+# point at; the trade-off is unpacked files (no archive compression).
+asar: false
 
-# Native modules must stay unpacked: they are loaded from disk by path, not
-# through the asar archive. landlock-run (Linux sandbox), node-pty (PTY
-# backend), koffi (Win32 dialog), and the Loader's bare-specifier helper all
-# ship as transitive dependencies of the dsh-base bundle.
-asarUnpack:
-  - '**/node_modules/@deepseek-ai/node-addon-landlock-run/**'
-  - '**/node_modules/node-addon-require-builtin/**'
-  - '**/node_modules/node-pty/**'
-  - '**/node_modules/koffi/**'
+# (asar: false makes the old asarUnpack list moot: native modules already sit
+# on disk under resources/app/node_modules, no archive to unpack from.)
 
 # The desktop composition loads no native module at runtime: node-pty's .node
 # is lazy (only interactive terminals touch it, and this composition omits the
