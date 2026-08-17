@@ -38,7 +38,15 @@ pnpm install      # downloads the Electron binary (~100 MB) on first run
 pnpm run build    # at the repository root: compiles every package + the web frontend + this app
 ```
 
-`pnpm install` downloads Electron; for `pnpm run dist`, electron-builder also fetches its platform toolchains (NSIS on Windows). If GitHub is slow or unreachable, mirror them once per shell: `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` and `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/` (PowerShell: `$env:ELECTRON_MIRROR="..."`).
+`pnpm install` downloads the Electron binary, but its postinstall can fail silently — a later `pnpm run dev` or `dist` then fails with `electronDist does not exist`. Recover from the `apps/electron` directory:
+
+```sh
+# PowerShell (macOS/Linux: export ELECTRON_MIRROR=...)
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+node node_modules/electron/install.js
+```
+
+Two mirrors cover the GitHub downloads; set them per shell when GitHub is slow or unreachable. `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` serves the Electron binary (install + the recovery above). `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/` serves electron-builder's NSIS/winCodeSign toolchains — `pnpm run dist` fails with `fetch failed` when those cannot download.
 
 Open the app in development with `pnpm run dev` (in `apps/electron`), or package it:
 

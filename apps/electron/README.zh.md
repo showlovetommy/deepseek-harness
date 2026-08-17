@@ -38,7 +38,15 @@ pnpm install      # downloads the Electron binary (~100 MB) on first run
 pnpm run build    # at the repository root: compiles every package + the web frontend + this app
 ```
 
-`pnpm install` 会下载 Electron；`pnpm run dist` 时 electron-builder 还会拉取平台工具链（Windows 上是 NSIS）。GitHub 慢或不可达时，在每个 shell 里设置镜像：`ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 与 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`（PowerShell 写作 `$env:ELECTRON_MIRROR="..."`）。
+`pnpm install` 会下载 Electron 二进制，但它的 postinstall 可能静默失败——之后 `pnpm run dev` 或 `dist` 会报 `electronDist does not exist`，而安装本身看起来是成功的。此时在 `apps/electron` 目录下手动下载：
+
+```sh
+# PowerShell (macOS/Linux: export ELECTRON_MIRROR=...)
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+node node_modules/electron/install.js
+```
+
+两个镜像变量覆盖 GitHub 下载，GitHub 慢或不可达时在每个 shell 里设置。`ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 用于 Electron 二进制（安装 + 上面的恢复）；`ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/` 用于 electron-builder 的 NSIS/winCodeSign 工具链——下载不了时 `pnpm run dist` 报 `fetch failed`。
 
 开发运行用 `pnpm run dev`（在 `apps/electron` 目录下），或打包：
 
