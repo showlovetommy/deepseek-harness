@@ -183,9 +183,9 @@ async function selfCheckDispatch(ctx: Context): Promise<void> {
     ['dynamicCordisRunner/syncInspectManifest', { args: { providers: [] } }],
     ['dynamicCordisRunner/inventory', { args: {} }],
   ] as const) {
-    const response = await connection.fetchHandler.fetch(new Request(`http://dsh.internal/api/${method}`, {
+    const response = await connection.fetchHandler.fetch(new Request(`http://127.0.0.1/api/${method}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', host: '127.0.0.1' },
       body: JSON.stringify({ type: 'client-request', rpcId: 'boot-self-check', method, payload }),
     }))
     console.log(`${BIN}: self-check ${method} -> ${response.status}`)

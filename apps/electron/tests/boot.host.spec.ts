@@ -117,6 +117,38 @@ describe('desktop host boot', () => {
       await ctx.fiber.dispose()
     }
   })
+
+  it('passes a privileged settings.describe envelope through the IPC trust fence', async () => {
+    const ctx = await bootDesktop()
+    const handlers = new Map<string, (event: unknown, request: IpcApiRequest) => Promise<unknown>>()
+    const ipcMain: IpcMainSurface = {
+      handle: (channel, listener) => { handlers.set(channel, listener) },
+      removeHandler: (channel) => { handlers.delete(channel) },
+    }
+    const remove = installApiHandler(ctx, ipcMain)
+    try {
+      const listener = handlers.get('dsh:api')
+      const result = await listener!(null, {
+        path: '/api/settings.describe',
+        init: {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            type: 'client-request',
+            rpcId: 'boot-smoke-2',
+            method: 'settings.describe',
+            payload: {},
+          }),
+        },
+      })
+      // The loopback IPC carrier passes the shared trust fence; a 403 here
+      // would mean the Host fence refused the app's own bridge.
+      expect(result).toMatchObject({ status: 200 })
+    } finally {
+      remove()
+      await ctx.fiber.dispose()
+    }
+  })
 })
 
 describe('createInternalFallback', () => {

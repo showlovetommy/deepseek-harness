@@ -66,10 +66,17 @@ export function installApiHandler(ctx: Context, ipcMain: IpcMainSurface): () => 
     if (connection === undefined) {
       return { status: 503, headers: {}, body: 'connection unavailable' }
     }
-    const url = `http://dsh.internal${request.path}`
+    // Loopback authority so the shared /api trust fence sees the app's own
+    // IPC carrier as a trusted local caller: the Host fence binds every
+    // request, a fetch Request does not derive Host from its URL until sent,
+    // and the fence reads the header — so stamp it explicitly.
+    const url = `http://127.0.0.1${request.path}`
     const init: RequestInit = {
       method: request.init.method,
-      ...request.init.headers !== undefined ? { headers: request.init.headers } : {},
+      headers: {
+        ...request.init.headers !== undefined ? request.init.headers : {},
+        host: '127.0.0.1',
+      },
       ...request.init.body !== undefined ? { body: request.init.body } : {},
     }
     const response = await connection.fetchHandler.fetch(new Request(url, init))

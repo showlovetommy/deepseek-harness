@@ -88,7 +88,7 @@ describe('installApiHandler', () => {
     }
     const result = await listener!(null, request)
     expect(fake.fetchCalls).toHaveLength(1)
-    expect(fake.fetchCalls[0]!.url).toBe('http://dsh.internal/api/session.list')
+    expect(fake.fetchCalls[0]!.url).toBe('http://127.0.0.1/api/session.list')
     expect(result).toMatchObject({ status: 200, headers: { 'content-type': 'application/json' } })
     const body = (result as { body?: unknown }).body
     expect(typeof body).toBe('string')
