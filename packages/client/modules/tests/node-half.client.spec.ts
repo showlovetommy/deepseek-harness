@@ -38,7 +38,7 @@ function writePackage(
 }
 
 /** Construct the node-half service and capture its plugin-bundle route. */
-function constructWithRoute(packageNames: string[]): { service: ClientModuleRegistry; route: WebRoute } {
+async function constructWithRoute(packageNames: string[]): Promise<{ service: ClientModuleRegistry; route: WebRoute }> {
   const ctx = new Context()
   ctx.baseUrl = pathToFileURL(root!).href + '/'
   ctx.provide('loader', {
@@ -58,14 +58,18 @@ function constructWithRoute(packageNames: string[]): { service: ClientModuleRegi
     tapIndex: () => () => {},
   }
   ctx.provide('webServer', webServer as WebServer)
-  const service = new ClientModuleRegistry(ctx)
-  if (route === undefined) throw new Error('client bundle route was not registered')
+  let service: ClientModuleRegistry | undefined
+  // Mount the Service through a plugin fiber so its `ctx.inject(['webServer'])`
+  // registration is scheduled and awaited like a real boot.
+  const fiber = ctx.plugin({ inject: ['loader'], apply: (applyCtx) => { service = new ClientModuleRegistry(applyCtx) } })
+  await fiber.await()
+  if (route === undefined || service === undefined) throw new Error('client bundle route was not registered')
   return { service, route }
 }
 
 /** Construct the node-half service over the enabled fixture entries. */
-function construct(packageNames: string[]): ClientModuleRegistry {
-  return constructWithRoute(packageNames).service
+async function construct(packageNames: string[]): Promise<ClientModuleRegistry> {
+  return (await constructWithRoute(packageNames)).service
 }
 
 /** Construct the node-half service without any webServer (the non-HTTP carrier shape). */
@@ -83,7 +87,7 @@ function constructWithoutServer(packageNames: string[]): ClientModuleRegistry {
 }
 
 describe('client bundle activation', () => {
-  it('allows sibling dsh roles', () => {
+  it('allows sibling dsh roles', async () => {
     const currentName = '@fixture/current-client-field'
     const clientPath = writePackage(currentName, {
       dsh: {
@@ -94,15 +98,15 @@ describe('client bundle activation', () => {
     })
     mkdirSync(dirname(clientPath), { recursive: true })
     writeFileSync(clientPath, 'module.exports = {}\n')
-    expect(construct([currentName]).graph().entries.map(entry => entry.id)).toEqual([currentName])
+    expect((await construct([currentName])).graph().entries.map(entry => entry.id)).toEqual([currentName])
   })
 
-  it('groups missing bundles under one source-build instruction with a package/path list', () => {
+  it('groups missing bundles under one source-build instruction with a package/path list', async () => {
     const firstName = '@fixture/missing-first'
     const secondName = '@fixture/missing-second'
     const firstPath = writePackage(firstName)
     const secondPath = writePackage(secondName)
-    expect(() => construct([firstName, secondName])).toThrow([
+    await expect(construct([firstName, secondName])).rejects.toThrow([
       'client-modules: 2 client packages failed to compose:',
       '  client bundles not found; run `pnpm run build` before launch:',
       `    - package: ${firstName}`,
@@ -112,13 +116,13 @@ describe('client bundle activation', () => {
     ].join('\n'))
   })
 
-  it('does not report other bundle read failures as missing builds', () => {
+  it('does not report other bundle read failures as missing builds', async () => {
     const packageName = '@fixture/unreadable-client'
     const clientPath = writePackage(packageName)
     mkdirSync(clientPath, { recursive: true })
     let thrown: unknown
     try {
-      construct([packageName])
+      await construct([packageName])
     } catch (error) {
       thrown = error
     }
@@ -138,6 +142,37 @@ describe('client bundle activation', () => {
     expect(service.clientPath(packageName)).toBe(clientPath)
   })
 
+  it('installs the bundle route and boot-manifest tap when the webServer arrives after construction', async () => {
+    const packageName = '@fixture/late-server'
+    const clientPath = writePackage(packageName)
+    mkdirSync(dirname(clientPath), { recursive: true })
+    writeFileSync(clientPath, 'module.exports = {}\n')
+    const ctx = new Context()
+    ctx.baseUrl = pathToFileURL(root!).href + '/'
+    ctx.provide('loader', {
+      *entries() {
+        yield { options: { name: packageName }, fiber: {}, disabled: false }
+      },
+    })
+    const routes: WebRoute[] = []
+    let tap: ((html: string) => string) | undefined
+    const webServer: Pick<WebServer, 'port' | 'register' | 'tapIndex'> = {
+      port: 0,
+      register: (candidate) => { routes.push(candidate); return () => {} },
+      tapIndex: (transform) => { tap = transform; return () => {} },
+    }
+    // The node half composes before the webserver row (browser boot order);
+    // the injection must still install the bundle route and the manifest tap.
+    const fiber = ctx.plugin({ inject: ['loader'], apply: (applyCtx) => { new ClientModuleRegistry(applyCtx) } })
+    ctx.provide('webServer', webServer as WebServer)
+    await fiber.await()
+    expect(routes.some(route => route.path === '/plugins')).toBe(true)
+    expect(tap).toBeDefined()
+    const html = tap!('<html><head></head><body></body></html>')
+    expect(html).toContain('window.__DSH_BOOT__')
+    expect(html).toContain(packageName)
+  })
+
   it('serves the source map beside a registered client bundle', async () => {
     const packageName = '@fixture/source-map'
     const clientPath = writePackage(packageName)
@@ -145,7 +180,7 @@ describe('client bundle activation', () => {
     writeFileSync(clientPath, 'module.exports = {}\n')
     const map = '{"version":3,"sources":["src/client/index.tsx"]}\n'
     writeFileSync(`${clientPath}.map`, map)
-    const { route } = constructWithRoute([packageName])
+    const { route } = await constructWithRoute([packageName])
     let status = 0
     let headers: Record<string, string> | undefined
     let body = ''

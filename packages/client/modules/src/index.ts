@@ -269,20 +269,21 @@ export class ClientModuleRegistry extends Service {
       throw new ClientPackageCompositionError(failures)
     }
 
-    // The browser carrier owns the HTTP delivery: register the bundle route
-    // and the index tap only when a webserver is composed. A non-HTTP carrier
-    // (the Electron shell) reads graph()/clientPath() and serves them itself.
-    const webServer = ctx.get('webServer')
-    if (webServer !== undefined) {
-      ctx.effect(
-        () => webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
+    // The webServer service is optional (the Electron shell serves the graph
+    // and bundles itself). `inject: ['loader']` composes this service before
+    // the webserver row, so register the bundle route and index tap through
+    // injection — an eager `ctx.get` would see the server absent and skip the
+    // browser carrier's boot-manifest injection.
+    ctx.inject(['webServer'], (webCtx) => {
+      webCtx.effect(
+        () => webCtx.webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
         'client-modules: bundle route',
       )
-      ctx.effect(
-        () => webServer.tapIndex(html => injectBootManifest(html, this.composed)),
+      webCtx.effect(
+        () => webCtx.webServer.tapIndex(html => injectBootManifest(html, this.composed)),
         'client-modules: boot manifest injection',
       )
-    }
+    })
   }
 
   /**
