@@ -9,7 +9,7 @@ import { ConnectionController, type ConnectionConfig, type ConnectionSinks, type
 import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
 import { ElectronIpcApiClient, type DshIpcBridge } from './electron-ipc-api-client.ts'
-import { createWebConnectionRpc } from './rpc.ts'
+import { createIpcConnectionRpc, createWebConnectionRpc } from './rpc.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
 
@@ -93,7 +93,7 @@ export function apply(ctx: Context): void {
   // stays first so keyless desktop UI development keeps working.
   const ipcBridge = (globalThis as { __dshBridge?: DshIpcBridge }).__dshBridge
   const api: IApiClient = fixtureClient ?? (ipcBridge !== undefined ? new ElectronIpcApiClient(ipcBridge) : new WebApiClient())
-  const rpc = fixtureClient?.rpc ?? createWebConnectionRpc()
+  const rpc = fixtureClient?.rpc ?? (ipcBridge !== undefined ? createIpcConnectionRpc(ipcBridge) : createWebConnectionRpc())
   let started = false
   let description: HostDescription | undefined
   const descriptionListeners = new Set<() => void>()
