@@ -116,6 +116,10 @@ function openWindow(): BrowserWindow {
       preload: join(dirname(APP_ANCHOR), 'lib', 'preload.cjs'),
     },
   })
+  // The shell is not menu-first: hide the window menu bar (Alt still reveals
+  // it on Windows/Linux; macOS menus live in the system bar and are untouched).
+  win.setAutoHideMenuBar(true)
+  win.setMenuBarVisibility(false)
   // A sandboxed preload that fails to load surfaces silently in the renderer;
   // log the failure and renderer warnings/errors on the main process so a
   // broken bridge is visible without opening DevTools.
