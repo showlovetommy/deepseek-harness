@@ -94,9 +94,15 @@ export async function bootHost(): Promise<Context> {
   fs.mkdirSync(profileDir, { recursive: true })
   const rootConfig = join(profileDir, 'cordis.yml')
   fs.writeFileSync(rootConfig, ROOT_CONFIG)
+  // The bundled agent-preset root: beside this app's own config, in both the
+  // source and built layouts — the same shipped-root assembly the CLI's
+  // composeProfile performs (the roster otherwise only sees the empty user
+  // presets directory).
+  const shippedPresetRoot = fileURLToPath(new URL('../config/agent-presets/', import.meta.url))
   return boot(BIN, rootConfig, [
     ...loadOverlayPatches(BIN, resolveBasePatch()),
     ...loadOverlayPatches(BIN, resolveDesktopPatch()),
+    { id: 'agent-presets', config: { default: 'standard', roots: [{ path: shippedPresetRoot, trust: 'system' }] } },
   ], (ctx) => {
     if (ctx.loader.internal === undefined) {
       ctx.loader.internal = createInternalFallback(rootConfig) as unknown as typeof ctx.loader.internal
