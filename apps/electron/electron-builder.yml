@@ -37,9 +37,15 @@ asarUnpack:
   - '**/node_modules/node-pty/**'
   - '**/node_modules/koffi/**'
 
-# electron-rebuild is applied by electron-builder's postinstall automatically
-# for native dependencies; keep the explicit hook for the sandbox addon.
-npmRebuild: true
+# The desktop composition loads no native module at runtime: node-pty's .node
+# is lazy (only interactive terminals touch it, and this composition omits the
+# terminal row), koffi's Win32 dialog path is superseded by the Electron dialog
+# backend, and the Loader's bare-specifier helper is replaced by the shell's
+# own internal-loader fallback. Rebuilding them for Electron's ABI would demand
+# a Visual Studio C++ toolchain on the build machine for binaries the app never
+# runs — the unpacked development run uses these exact installed artifacts, so
+# skip the rebuild.
+npmRebuild: false
 
 win:
   target:
