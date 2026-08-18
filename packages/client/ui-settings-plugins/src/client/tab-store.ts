@@ -75,11 +75,16 @@ export class ConfigurablePluginsTabController {
     let response: Awaited<ReturnType<IApiClient['settings']['describe']>>
     try {
       response = await this.api.settings.describe({})
-    } catch (_settingsReadFailure) {
+    } catch (failure) {
       // The tab keeps the namespaces it last knew; the next invalidation
-      // or reconnect reads again.
+      // or reconnect reads again. The failure is reported (not silent) so a
+      // permanently empty configurable tab is diagnosable from the console.
+      console.warn('[ui-settings-plugins] configurable tab load: settings.describe failed:', failure)
       return
     }
+    console.info(
+      `[ui-settings-plugins] configurable tab loaded ${response.result.ok ? response.result.value.namespaces.length : 0} namespace(s)`,
+    )
     if (this.isDisposed() || generation !== this.generation || !response.result.ok) return
     this.served = response.result.value.namespaces.map(view => view.ns)
     this.loaded = true
