@@ -28,14 +28,17 @@ export type ConfigurablePluginsTabProps =
 export function ConfigurablePluginsTab(props: ConfigurablePluginsTabProps) {
   const { t, renderSlot } = props
   const { loaded, namespaces } = props.useConfigurablePlugins(snapshot => snapshot)
+  console.log(`[ui-settings-plugins] tab render: loaded=${loaded} namespaces=${namespaces.length}`)
   if (namespaces.length > 0) {
     return (
       <ul className={css.cards}>
-        {namespaces.map(ns => (
+        {namespaces.map((ns) => {
+          const node = renderSlot('settings.plugin.item', {}, { entryKey: ns })
+          if (node === null) console.warn('[ui-settings-plugins] no card rendered for ns:', ns)
           // One dispatch per namespace, so the list identity is the namespace
           // rather than a position that shifts as cards arrive.
-          <Fragment key={ns}>{renderSlot('settings.plugin.item', {}, { entryKey: ns })}</Fragment>
-        ))}
+          return <Fragment key={ns}>{node}</Fragment>
+        })}
       </ul>
     )
   }
