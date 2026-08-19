@@ -63,7 +63,11 @@ export const inject: string[] = []
 export interface ConnectionHandle {
   /** Shared api client (fixture or real, decided at boot from the page URL). */
   readonly api: IApiClient
-  /** Whether the current page authority is loopback; non-browser contexts default to true. */
+  /**
+   * Whether the current page authority is loopback; non-browser contexts and
+   * the desktop IPC carrier default to true (the bridge talks to the
+   * in-process host, so its page may host anywhere).
+   */
   readonly isLoopback: boolean
   /** Generation-scoped Host facts, including native path-open capability. */
   readonly hostDescription: HostDescriptionSource
@@ -110,7 +114,11 @@ export function apply(ctx: Context): void {
   }
   const handle: ConnectionHandle = {
     api,
-    isLoopback: pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    // The IPC carrier is the in-process host regardless of the dsh:// page
+    // authority, so the desktop shell counts as loopback even though its
+    // hostname (`app`) is not. That keeps settings/model scopes host-backed
+    // and native path-open available in the packaged app.
+    isLoopback: ipcBridge !== undefined || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
     hostDescription: {
       getSnapshot: () => description,
       subscribe: (listener) => {

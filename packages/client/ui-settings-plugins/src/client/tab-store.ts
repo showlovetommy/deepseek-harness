@@ -82,9 +82,6 @@ export class ConfigurablePluginsTabController {
       console.warn('[ui-settings-plugins] configurable tab load: settings.describe failed:', failure)
       return
     }
-    console.info(
-      `[ui-settings-plugins] configurable tab loaded ${response.result.ok ? response.result.value.namespaces.length : 0} namespace(s)`,
-    )
     if (this.isDisposed() || generation !== this.generation || !response.result.ok) return
     this.served = response.result.value.namespaces.map(view => view.ns)
     this.loaded = true

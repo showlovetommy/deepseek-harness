@@ -153,7 +153,6 @@ export function apply(ctx: ClientContext): void {
   }, ConfigurablePluginsTab))
 
   ctx.slots.inject('settings.plugin.item', function* () {
-    console.log('[ui-settings-plugins] card generator invoked')
     yield ctx.slots.register({
       name: 'settings.plugin.item',
       key: SHELL_NS,
@@ -172,6 +171,5 @@ export function apply(ctx: ClientContext): void {
       locale: NS,
       inject: () => webSearch.inject(),
     }, WebSearchCard)
-    console.log('[ui-settings-plugins] card generator finished')
   })
 }

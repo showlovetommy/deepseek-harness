@@ -4,7 +4,7 @@
  */
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apply, type ConnectionHandle } from '../src/client/index.ts'
+import { apply, ElectronIpcApiClient, type ConnectionHandle } from '../src/client/index.ts'
 import type { RpcMessage } from '../src/client/api.ts'
 import { RpcId } from '../src/client/api.ts'
 import { FixtureApiClient } from '../src/client/fixture.ts'
@@ -12,6 +12,7 @@ import { WebApiClient } from '../src/client/web-api-client.ts'
 
 type Win = { location?: { hostname: string; search: string; origin?: string } }
 type WebSocketGlobal = { WebSocket?: typeof WebSocket }
+type BridgeGlobal = { __dshBridge?: unknown }
 
 const originalWebSocket = globalThis.WebSocket
 const sockets: FakeWebSocket[] = []
@@ -49,6 +50,7 @@ class FakeWebSocket extends EventTarget {
 
 afterEach(() => {
   delete (globalThis as Win).location
+  delete (globalThis as BridgeGlobal).__dshBridge
   sockets.length = 0
   if (originalWebSocket === undefined) delete (globalThis as WebSocketGlobal).WebSocket
   else globalThis.WebSocket = originalWebSocket
@@ -82,6 +84,22 @@ describe('connection client apply', () => {
   it('reports non-loopback page authority through the connection handle', async () => {
     ;(globalThis as Win).location = { hostname: '192.0.2.20', search: '' }
     expect((await mount()).isLoopback).toBe(false)
+  })
+
+  it('treats the desktop IPC carrier as loopback regardless of the dsh:// page host', async () => {
+    // The dsh:// shell page hosts at `app`, which is not a loopback hostname —
+    // without the bridge it reads as a remote authority.
+    ;(globalThis as Win).location = { hostname: 'app', search: '' }
+    expect((await mount()).isLoopback).toBe(false)
+    // With the preload bridge present the carrier is the in-process host, so
+    // the handle must report loopback for settings/model scopes to go host-backed.
+    ;(globalThis as BridgeGlobal).__dshBridge = {
+      invoke: async () => ({ status: 200, headers: {}, body: '{}' }),
+      onEvent: () => () => {},
+    }
+    const handle = await mount()
+    expect(handle.api).toBeInstanceOf(ElectronIpcApiClient)
+    expect(handle.isLoopback).toBe(true)
   })
 
   it('start() hands out one loop, rejects a second consumer, and stop() aborts the streams', async () => {
